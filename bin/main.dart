@@ -109,9 +109,10 @@ class CreateEmbeddings extends Command {
       print('Aborting');
       return;
     }
+    // Batches are limited to 100
     for (var batch = 0; batch < (issuesToUpdate.length / 100).ceil(); batch++) {
       final offset = batch * 100;
-      print('Creating first batch of embeddings');
+      print('Creating batch ${batch + 1} of embeddings');
       final result = await model.batchEmbedContents([
         for (var i = offset; i < issuesToUpdate.length && i < offset + 100; i++)
           EmbedContentRequest(
@@ -122,8 +123,8 @@ class CreateEmbeddings extends Command {
       print('Batch embed completed');
 
       print('Writing embeddings to disk');
-      for (var i = offset; i < result.embeddings.length + offset; i++) {
-        final issue = issuesToUpdate[i];
+      for (var i = 0; i < result.embeddings.length; i++) {
+        final issue = issuesToUpdate[i + offset];
         final embeddingsFile = File(issue.embeddingsPath(taskType, repoSlug));
         final embeddingData = Float32List.fromList(result.embeddings[i].values);
         embeddingsFile.writeAsBytesSync(embeddingData.buffer.asUint8List());
