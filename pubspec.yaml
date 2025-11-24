@@ -1,0 +1,10 @@
+name: github_embeddings
+description: Manages a local embeddings database for github embeddings
+environment:
+  sdk: ^3.10.0
+dependencies:
+  crypto: ^3.0.7
+  github: ^9.25.0
+  google_generative_ai: ^0.4.7
+  path: ^1.9.1
+  vector_math: ^2.2.0
