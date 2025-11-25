@@ -9,12 +9,21 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:path/path.dart' as p;
 
 void main(List<String> args) async {
-  final github = GitHub(
-    auth: Authentication.withToken(Platform.environment['GITHUB_TOKEN']!),
-  );
+  final githubToken = Platform.environment['GITHUB_TOKEN'];
+  if (githubToken == null) {
+    print('Missing GITHUB_TOKEN environment variable.');
+    exit(1);
+  }
+  final github = GitHub(auth: Authentication.withToken(githubToken));
+
+  final geminiToken = Platform.environment['GEMINI_API_KEY'];
+  if (geminiToken == null) {
+    print('Missing GITHUB_TOKEN environment variable.');
+    exit(1);
+  }
   final model = GenerativeModel(
     model: 'gemini-embedding-001',
-    apiKey: Platform.environment['GEMINI_API_KEY']!,
+    apiKey: geminiToken,
   );
 
   final runner = CommandRunner(

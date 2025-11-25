@@ -10,6 +10,10 @@ the up to date CLI options.
 
 You will need two environment variables set, GEMINI_API_KEY and GITHUB_TOKEN.
 
+For the github token, see https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens.
+
+For the gemini API key, see https://aistudio.google.com/api-keys.
+
 ### Creating issue embeddings
 
 Use the `create` command, a basic example for a repo as follows:
