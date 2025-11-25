@@ -1,5 +1,6 @@
 name: embeddigns_playground
 description: Playground for working with gembeddings
+version: 0.0.2
 environment:
   sdk: ^3.10.0
 dependencies:
@@ -7,5 +8,5 @@ dependencies:
   crypto: ^3.0.7
   dart_mcp: ^0.4.0
   github: ^9.25.0
-  google_generative_ai: ^0.4.7
+  google_cloud_ai_generativelanguage_v1beta: ^0.2.0
   path: ^1.9.1

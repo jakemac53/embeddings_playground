@@ -5,47 +5,31 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:crypto/crypto.dart';
 import 'package:github/github.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:google_cloud_ai_generativelanguage_v1beta/generativelanguage.dart'
+    hide File;
 import 'package:path/path.dart' as p;
 
 void main(List<String> args) async {
-  await createCommandRunner().run(args);
+  final commandRunner = createCommandRunner();
+  await commandRunner.run(args);
 }
 
+const embeddingsModel = 'models/gemini-embedding-001';
+
 CommandRunner createCommandRunner() {
-  final githubToken = Platform.environment['GITHUB_TOKEN'];
-  if (githubToken == null) {
-    print('Missing GITHUB_TOKEN environment variable.');
-    exit(1);
-  }
-  final github = GitHub(auth: Authentication.withToken(githubToken));
-
-  final geminiToken = Platform.environment['GEMINI_API_KEY'];
-  if (geminiToken == null) {
-    print('Missing GITHUB_TOKEN environment variable.');
-    exit(1);
-  }
-  final model = GenerativeModel(
-    model: 'gemini-embedding-001',
-    apiKey: geminiToken,
-  );
-
   final runner = CommandRunner(
     'dart bin/github.dart',
     'A tool for working with github embeddings',
   );
   runner
-    ..addCommand(CreateEmbeddings(github, model))
-    ..addCommand(QueryEmbeddings(model))
+    ..addCommand(CreateEmbeddings())
+    ..addCommand(QueryEmbeddings())
     ..addCommand(GroupEmbeddings());
   return runner;
 }
 
 class CreateEmbeddings extends Command {
-  final GitHub github;
-  final GenerativeModel model;
-
-  CreateEmbeddings(this.github, this.model) {
+  CreateEmbeddings() {
     argParser
       ..addOption(
         'repo',
@@ -57,8 +41,8 @@ class CreateEmbeddings extends Command {
       ..addOption(
         'issue-embeddings-task-type',
         help: 'The issue embedding task type to compare against',
-        defaultsTo: TaskType.retrievalDocument.name,
-        allowed: TaskType.values.map((e) => e.name).toList(),
+        defaultsTo: TaskType.retrievalDocument.value,
+        allowed: allTaskTypes.map((e) => e.value).toList(),
       )
       ..addOption(
         'since',
@@ -84,92 +68,120 @@ class CreateEmbeddings extends Command {
 
   @override
   Future<void> run() async {
-    var argResults = this.argResults!;
-    final issuesService = IssuesService(github);
-    final repoSlug = RepositorySlug.full(argResults.option('repo')!);
-    final since = DateTime.parse(argResults.option('since')!);
-    final taskType = taskTypeFromArg(
-      argResults.option('issue-embeddings-task-type')!,
-    );
-    final autoApprove = argResults.flag('auto-approve');
+    final githubToken = Platform.environment['GITHUB_TOKEN'];
+    if (githubToken == null) {
+      print('Missing GITHUB_TOKEN environment variable.');
+      exit(1);
+    }
+    final github = GitHub(auth: Authentication.withToken(githubToken));
+    final model = GenerativeService.fromApiKey();
+    try {
+      var argResults = this.argResults!;
+      final issuesService = IssuesService(github);
+      final repoSlug = RepositorySlug.full(argResults.option('repo')!);
+      final since = DateTime.parse(argResults.option('since')!);
+      final taskType = TaskType.fromJson(
+        argResults.option('issue-embeddings-task-type')!,
+      );
+      final autoApprove = argResults.flag('auto-approve');
 
-    print('Listing all issues in ${repoSlug.fullName} since $since');
-    final issues = issuesService.listByRepo(repoSlug, since: since);
-    final issuesToUpdate = <Issue>[];
-    await for (final issue in issues) {
-      final hashFile = File(issue.contentHashPath(taskType, repoSlug));
-      final String lastHash;
-      if (hashFile.existsSync()) {
-        lastHash = hashFile.readAsStringSync();
+      print('Listing all issues in ${repoSlug.fullName} since $since');
+      final issues = issuesService.listByRepo(repoSlug, since: since);
+      final issuesToUpdate = <Issue>[];
+      await for (final issue in issues) {
+        final hashFile = File(issue.contentHashPath(taskType, repoSlug));
+        final String lastHash;
+        if (hashFile.existsSync()) {
+          lastHash = hashFile.readAsStringSync();
+        } else {
+          lastHash = '';
+        }
+        final hash = issue.contentHash();
+        if (lastHash == hash) {
+          print('skipping issue ${issue.number}, content hash hasn\'t changed');
+          continue;
+        }
+        issuesToUpdate.add(issue);
+      }
+
+      if (issuesToUpdate.isEmpty) {
+        print('No embeddings to update, done');
+        return;
+      }
+
+      final approxTokens = issuesToUpdate
+          .fold(0.0, (total, issue) => total += issue.content.length / 4)
+          .floor();
+      print(
+        'Create embeddings for ${issuesToUpdate.length} issues, using approximatly $approxTokens tokens? (y/n)',
+      );
+      if (autoApprove || await stdin.readLineSync() == 'y') {
+        print('Creating embeddings');
       } else {
-        lastHash = '';
+        print('Aborting');
+        return;
       }
-      final hash = issue.contentHash();
-      if (lastHash == hash) {
-        print('skipping issue ${issue.number}, content hash hasn\'t changed');
-        continue;
-      }
-      issuesToUpdate.add(issue);
-    }
-
-    if (issuesToUpdate.isEmpty) {
-      print('No embeddings to update, done');
-      return;
-    }
-
-    final approxTokens = issuesToUpdate
-        .fold(0.0, (total, issue) => total += issue.content.length / 4)
-        .floor();
-    print(
-      'Create embeddings for ${issuesToUpdate.length} issues, using approximatly $approxTokens tokens? (y/n)',
-    );
-    if (autoApprove || await stdin.readLineSync() == 'y') {
-      print('Creating embeddings');
-    } else {
-      print('Aborting');
-      return;
-    }
-    // Batches are limited to 100
-    for (var batch = 0; batch < (issuesToUpdate.length / 100).ceil(); batch++) {
-      final offset = batch * 100;
-      print('Creating batch ${batch + 1} of embeddings');
-      final result = await model.batchEmbedContents([
-        for (var i = offset; i < issuesToUpdate.length && i < offset + 100; i++)
-          EmbedContentRequest(
-            Content.text(issuesToUpdate[i].content),
-            taskType: taskType,
+      // Batches are limited to 100
+      for (
+        var batch = 0;
+        batch < (issuesToUpdate.length / 100).ceil();
+        batch++
+      ) {
+        final offset = batch * 100;
+        print('Creating batch ${batch + 1} of embeddings');
+        final result = await model.batchEmbedContents(
+          BatchEmbedContentsRequest(
+            model: embeddingsModel,
+            requests: [
+              for (
+                var i = offset;
+                i < issuesToUpdate.length && i < offset + 100;
+                i++
+              )
+                EmbedContentRequest(
+                  model: embeddingsModel,
+                  content: Content(
+                    parts: [Part(text: issuesToUpdate[i].content)],
+                  ),
+                  taskType: taskType,
+                ),
+            ],
           ),
-      ]);
-      print('Batch embed completed');
+        );
+        print('Batch embed completed');
 
-      print('Writing embeddings to disk');
-      for (var i = 0; i < result.embeddings.length; i++) {
-        final issue = issuesToUpdate[i + offset];
-        try {
-          final embeddingsFile = File(issue.embeddingsPath(taskType, repoSlug));
-          if (!embeddingsFile.existsSync()) {
-            embeddingsFile.createSync(recursive: true);
+        print('Writing embeddings to disk');
+        for (var i = 0; i < result.embeddings.length; i++) {
+          final issue = issuesToUpdate[i + offset];
+          try {
+            final embeddingsFile = File(
+              issue.embeddingsPath(taskType, repoSlug),
+            );
+            if (!embeddingsFile.existsSync()) {
+              embeddingsFile.createSync(recursive: true);
+            }
+            final embeddingData = Float32List.fromList(
+              result.embeddings[i].values,
+            );
+            embeddingsFile.writeAsBytesSync(embeddingData.buffer.asUint8List());
+            final hashFile = File(issue.contentHashPath(taskType, repoSlug));
+            hashFile.writeAsStringSync(issue.contentHash());
+            print('Processed issue ${issue.number}');
+          } catch (e, s) {
+            print('Error writing embeddings for issue $issue:\n$e\n$s');
+            Directory(issue.issueDir(repoSlug)).deleteSync(recursive: true);
           }
-          final embeddingData = Float32List.fromList(
-            result.embeddings[i].values,
-          );
-          embeddingsFile.writeAsBytesSync(embeddingData.buffer.asUint8List());
-          final hashFile = File(issue.contentHashPath(taskType, repoSlug));
-          hashFile.writeAsStringSync(issue.contentHash());
-          print('Processed issue ${issue.number}');
-        } catch (e, s) {
-          print('Error writing embeddings for issue $issue:\n$e\n$s');
-          Directory(issue.issueDir(repoSlug)).deleteSync(recursive: true);
         }
       }
+    } finally {
+      github.dispose();
+      model.close();
     }
   }
 }
 
 class QueryEmbeddings extends Command {
-  final GenerativeModel model;
-
-  QueryEmbeddings(this.model) {
+  QueryEmbeddings() {
     argParser
       ..addOption(
         'repo',
@@ -181,14 +193,14 @@ class QueryEmbeddings extends Command {
       ..addOption(
         'issue-embeddings-task-type',
         help: 'The issue embedding task type to compare against',
-        defaultsTo: TaskType.retrievalDocument.name,
-        allowed: TaskType.values.map((e) => e.name).toList(),
+        defaultsTo: TaskType.retrievalDocument.value,
+        allowed: allTaskTypes.map((e) => e.value).toList(),
       )
       ..addOption(
         'query-embeddings-task-type',
         help: 'The query embedding task type',
-        defaultsTo: TaskType.retrievalQuery.name,
-        allowed: TaskType.values.map((e) => e.name).toList(),
+        defaultsTo: TaskType.retrievalQuery.value,
+        allowed: allTaskTypes.map((e) => e.value).toList(),
       );
   }
 
@@ -200,56 +212,64 @@ class QueryEmbeddings extends Command {
 
   @override
   Future<void> run() async {
-    var argResults = this.argResults!;
-    final query = argResults.rest.join(' ');
-    final repoSlug = RepositorySlug.full(argResults.option('repo')!);
-    final issueTaskType = taskTypeFromArg(
-      argResults.option('issue-embeddings-task-type')!,
-    );
-    final queryTaskType = taskTypeFromArg(
-      argResults.option('query-embeddings-task-type')!,
-    );
-    print('getting embedding for query: $query');
-    final queryEmbedding = (await model.embedContent(
-      Content.text(query),
-      taskType: queryTaskType,
-    )).embedding.values;
-    File? bestFile;
-    double? bestDotProduct;
-    await for (var dir in Directory(
-      p.join('embeddings', repoSlug.owner, repoSlug.name, 'issues'),
-    ).list()) {
-      if (dir is! Directory) {
-        print(
-          'no embeddings found for ${repoSlug.fullName}, create some with '
-          '`create`',
+    final model = GenerativeService.fromApiKey();
+    try {
+      var argResults = this.argResults!;
+      final query = argResults.rest.join(' ');
+      final repoSlug = RepositorySlug.full(argResults.option('repo')!);
+      final issueTaskType = TaskType.fromJson(
+        argResults.option('issue-embeddings-task-type')!,
+      );
+      final queryTaskType = TaskType.fromJson(
+        argResults.option('query-embeddings-task-type')!,
+      );
+      print('getting embedding for query: $query');
+      final queryEmbedding = (await model.embedContent(
+        EmbedContentRequest(
+          model: embeddingsModel,
+          content: Content(parts: [Part(text: query)]),
+          taskType: queryTaskType,
+        ),
+      )).embedding!.values;
+      File? bestFile;
+      double? bestDotProduct;
+      await for (var dir in Directory(
+        p.join('embeddings', repoSlug.owner, repoSlug.name, 'issues'),
+      ).list()) {
+        if (dir is! Directory) {
+          print(
+            'no embeddings found for ${repoSlug.fullName}, create some with '
+            '`create`',
+          );
+          continue;
+        }
+        final embeddingFile = File(
+          p.join(dir.path, '${issueTaskType.value}.embedding'),
         );
-        continue;
+        // This can be missing if there was an error during embedding creation.
+        if (!embeddingFile.existsSync()) continue;
+        final embeddingData = Float32List.view(
+          embeddingFile.readAsBytesSync().buffer,
+        );
+        final dotProduct = computeDotProduct(queryEmbedding, embeddingData);
+        if (bestDotProduct == null || dotProduct > bestDotProduct) {
+          print('found better match: ${p.basename(dir.path)} ($dotProduct)');
+          bestDotProduct = dotProduct;
+          bestFile = embeddingFile;
+        }
       }
-      final embeddingFile = File(
-        p.join(dir.path, '${issueTaskType.name}.embedding'),
-      );
-      // This can be missing if there was an error during embedding creation.
-      if (!embeddingFile.existsSync()) continue;
-      final embeddingData = Float32List.view(
-        embeddingFile.readAsBytesSync().buffer,
-      );
-      final dotProduct = computeDotProduct(queryEmbedding, embeddingData);
-      if (bestDotProduct == null || dotProduct > bestDotProduct) {
-        print('found better match: ${p.basename(dir.path)} ($dotProduct)');
-        bestDotProduct = dotProduct;
-        bestFile = embeddingFile;
+      if (bestFile != null) {
+        final issueNumber = p.basename(p.dirname(bestFile.path));
+        print(
+          'The closest issue is '
+          'https://github.com/${repoSlug.fullName}/issues/$issueNumber '
+          'with a score of ${bestDotProduct}',
+        );
+      } else {
+        print('No issues found');
       }
-    }
-    if (bestFile != null) {
-      final issueNumber = p.basename(p.dirname(bestFile.path));
-      print(
-        'The closest issue is '
-        'https://github.com/${repoSlug.fullName}/issues/$issueNumber '
-        'with a score of ${bestDotProduct}',
-      );
-    } else {
-      print('No issues found');
+    } finally {
+      model.close();
     }
   }
 }
@@ -267,8 +287,8 @@ class GroupEmbeddings extends Command {
       ..addOption(
         'issue-embeddings-task-type',
         help: 'The issue embedding task type to use for grouping',
-        defaultsTo: TaskType.clustering.name,
-        allowed: TaskType.values.map((e) => e.name).toList(),
+        defaultsTo: TaskType.clustering.value,
+        allowed: allTaskTypes.map((e) => e.value).toList(),
       )
       ..addOption(
         'group-threshold',
@@ -296,7 +316,7 @@ class GroupEmbeddings extends Command {
   Future<void> run() async {
     var argResults = this.argResults!;
     final repoSlug = RepositorySlug.full(argResults.option('repo')!);
-    final issueTaskType = taskTypeFromArg(
+    final issueTaskType = TaskType.fromJson(
       argResults.option('issue-embeddings-task-type')!,
     );
     final groupThreshold = double.parse(argResults.option('group-threshold')!);
@@ -321,7 +341,7 @@ class GroupEmbeddings extends Command {
       }
       final issueNumber = p.basename(dir.path);
       final embeddingFile = File(
-        p.join(dir.path, '${issueTaskType.name}.embedding'),
+        p.join(dir.path, '${issueTaskType.value}.embedding'),
       );
       final embeddingData = Float32List.view(
         embeddingFile.readAsBytesSync().buffer,
@@ -358,10 +378,6 @@ class GroupEmbeddings extends Command {
   }
 }
 
-TaskType taskTypeFromArg(String arg) {
-  return TaskType.values.firstWhere((taskType) => taskType.name == arg);
-}
-
 double computeDotProduct(List<double> a, List<double> b) {
   double result = 0;
   for (int i = 0; i < a.length; i++) {
@@ -375,9 +391,9 @@ extension _ on Issue {
       p.join('embeddings', slug.owner, slug.name, 'issues', number.toString());
 
   String contentHashPath(TaskType taskType, RepositorySlug slug) =>
-      p.join(issueDir(slug), '${taskType.name}.contentHash');
+      p.join(issueDir(slug), '${taskType.value}.contentHash');
   String embeddingsPath(TaskType taskType, RepositorySlug slug) =>
-      p.join(issueDir(slug), '${taskType.name}.embedding');
+      p.join(issueDir(slug), '${taskType.value}.embedding');
   String get content =>
       '''
 # $title
@@ -387,3 +403,15 @@ $body
 
   String contentHash() => md5.convert(utf8.encode(content)).toString();
 }
+
+const allTaskTypes = [
+  TaskType.classification,
+  TaskType.clustering,
+  TaskType.codeRetrievalQuery,
+  TaskType.factVerification,
+  TaskType.questionAnswering,
+  TaskType.retrievalDocument,
+  TaskType.retrievalQuery,
+  TaskType.semanticSimilarity,
+  TaskType.taskTypeUnspecified,
+];

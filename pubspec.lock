@@ -49,14 +49,62 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.25.0"
-  google_generative_ai:
+  google_cloud_ai_generativelanguage_v1beta:
     dependency: "direct main"
     description:
-      name: google_generative_ai
-      sha256: "71f613d0247968992ad87a0eb21650a566869757442ba55a31a81be6746e0d1f"
+      name: google_cloud_ai_generativelanguage_v1beta
+      sha256: "4a8a3347a0c862e995edc708e2dd2f7633c41f3e72b12ddc4172a0ca28438b0b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.7"
+    version: "0.2.0"
+  google_cloud_longrunning:
+    dependency: transitive
+    description:
+      name: google_cloud_longrunning
+      sha256: eb002af9c1e3e7d142a04134968a617d66245c580d2a0216fd8131bd4a1ab88e
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
+  google_cloud_protobuf:
+    dependency: transitive
+    description:
+      name: google_cloud_protobuf
+      sha256: df16ec3dcb0aeaa06e0a96ee24f1c598b9f346ba0bee7b8fded0d95a0536fe23
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
+  google_cloud_rpc:
+    dependency: transitive
+    description:
+      name: google_cloud_rpc
+      sha256: "82d744d5d76c8e080873b2c481058aed263c7300f0b3346de131848aa1e3e592"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
+  google_cloud_type:
+    dependency: transitive
+    description:
+      name: google_cloud_type
+      sha256: "7639412b51b6c85a09fd56d43e28250eb6e6a2249bfa3580626cef03d87f9643"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
+  google_identity_services_web:
+    dependency: transitive
+    description:
+      name: google_identity_services_web
+      sha256: "5d187c46dc59e02646e10fe82665fc3884a9b71bc1c90c2b8b749316d33ee454"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.3+1"
+  googleapis_auth:
+    dependency: transitive
+    description:
+      name: googleapis_auth
+      sha256: b81fe352cc4a330b3710d2b7ad258d9bcef6f909bb759b306bf42973a7d046db
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   http:
     dependency: transitive
     description:
