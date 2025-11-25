@@ -1,5 +1,5 @@
-name: github_embeddings
-description: Manages a local embeddings database for github embeddings
+name: embeddigns_playground
+description: Playground for working with gembeddings
 environment:
   sdk: ^3.10.0
 dependencies:

@@ -18,8 +18,8 @@ void main(List<String> args) async {
   );
 
   final runner = CommandRunner(
-    'main.dart',
-    'A tool for creating and querying embeddings',
+    'dart bin/github.dart',
+    'A tool for working with github embeddings',
   );
   runner
     ..addCommand(CreateEmbeddings(github, model))
@@ -53,7 +53,7 @@ class CreateEmbeddings extends Command {
         help: 'Only issues with activity since this date are included',
         defaultsTo: DateTime.now()
             .subtract(const Duration(days: 365))
-            .toString(),
+            .toIso8601String(),
       );
   }
 
@@ -68,13 +68,13 @@ class CreateEmbeddings extends Command {
     var argResults = this.argResults!;
     final issuesService = IssuesService(github);
     final repoSlug = RepositorySlug.full(argResults.option('repo')!);
-    final issues = issuesService.listByRepo(
-      repoSlug,
-      since: DateTime.parse(argResults.option('since')!),
-    );
+    final since = DateTime.parse(argResults.option('since')!);
     final taskType = taskTypeFromArg(
       argResults.option('issue-embeddings-task-type')!,
     );
+
+    print('Listing all issues in ${repoSlug.fullName} since $since');
+    final issues = issuesService.listByRepo(repoSlug, since: since);
     final issuesToUpdate = <Issue>[];
     await for (final issue in issues) {
       final hashFile = File(issue.contentHashPath(taskType, repoSlug));
@@ -83,7 +83,6 @@ class CreateEmbeddings extends Command {
         lastHash = hashFile.readAsStringSync();
       } else {
         lastHash = '';
-        hashFile.createSync(recursive: true);
       }
       final hash = issue.contentHash();
       if (lastHash == hash) {
@@ -126,12 +125,22 @@ class CreateEmbeddings extends Command {
       print('Writing embeddings to disk');
       for (var i = 0; i < result.embeddings.length; i++) {
         final issue = issuesToUpdate[i + offset];
-        final embeddingsFile = File(issue.embeddingsPath(taskType, repoSlug));
-        final embeddingData = Float32List.fromList(result.embeddings[i].values);
-        embeddingsFile.writeAsBytesSync(embeddingData.buffer.asUint8List());
-        final hashFile = File(issue.contentHashPath(taskType, repoSlug));
-        hashFile.writeAsStringSync(issue.contentHash());
-        print('Processed issue ${issue.number}');
+        try {
+          final embeddingsFile = File(issue.embeddingsPath(taskType, repoSlug));
+          if (!embeddingsFile.existsSync()) {
+            embeddingsFile.createSync(recursive: true);
+          }
+          final embeddingData = Float32List.fromList(
+            result.embeddings[i].values,
+          );
+          embeddingsFile.writeAsBytesSync(embeddingData.buffer.asUint8List());
+          final hashFile = File(issue.contentHashPath(taskType, repoSlug));
+          hashFile.writeAsStringSync(issue.contentHash());
+          print('Processed issue ${issue.number}');
+        } catch (e, s) {
+          print('Error writing embeddings for issue $issue:\n$e\n$s');
+          Directory(issue.issueDir(repoSlug)).deleteSync(recursive: true);
+        }
       }
     }
   }
@@ -200,6 +209,8 @@ class QueryEmbeddings extends Command {
       final embeddingFile = File(
         p.join(dir.path, '${issueTaskType.name}.embedding'),
       );
+      // This can be missing if there was an error during embedding creation.
+      if (!embeddingFile.existsSync()) continue;
       final embeddingData = Float32List.view(
         embeddingFile.readAsBytesSync().buffer,
       );
@@ -244,7 +255,7 @@ class GroupEmbeddings extends Command {
         help:
             'A number between -1 and 1, controls whether issues are grouped. '
             'Numbers closer to 1 will be more closely related.',
-        defaultsTo: '0.9',
+        defaultsTo: '0.95',
       )
       ..addMultiOption(
         'issue',
