@@ -236,7 +236,7 @@ class GroupEmbeddings extends Command {
       ..addOption(
         'issue-embeddings-task-type',
         help: 'The issue embedding task type to use for grouping',
-        defaultsTo: TaskType.retrievalDocument.name,
+        defaultsTo: TaskType.clustering.name,
         allowed: TaskType.values.map((e) => e.name).toList(),
       )
       ..addOption(
