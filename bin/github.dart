@@ -245,11 +245,18 @@ class GroupEmbeddings extends Command {
             'A number between -1 and 1, controls whether issues are grouped. '
             'Numbers closer to 1 will be more closely related.',
         defaultsTo: '0.9',
+      )
+      ..addMultiOption(
+        'issue',
+        abbr: 'i',
+        help: 'Filters the output to groups containing specific issues',
       );
   }
 
   @override
-  String get description => 'Runs a query against embeddings for a repo';
+  String get description =>
+      'Groups similar issues in a repo together, or outputs similar issues to '
+      'some specified issues';
 
   @override
   String get name => 'group';
@@ -262,6 +269,7 @@ class GroupEmbeddings extends Command {
       argResults.option('issue-embeddings-task-type')!,
     );
     final groupThreshold = double.parse(argResults.option('group-threshold')!);
+    final issues = argResults.multiOption('issue');
 
     // First, read all the embeddings and index by issue number.
     // Note that for each entry in a set, there is a key in this map pointing
@@ -290,6 +298,7 @@ class GroupEmbeddings extends Command {
       embeddings[issueNumber] = embeddingData;
       for (final MapEntry(:key, :value) in embeddings.entries) {
         if (key == issueNumber) continue;
+        if (groups[key]?.contains(issueNumber) ?? false) continue;
 
         final dotProduct = computeDotProduct(value, embeddingData);
         if (dotProduct >= groupThreshold) {
@@ -307,6 +316,9 @@ class GroupEmbeddings extends Command {
     final printedGroups = <Set<String>>{};
     for (final group in groups.values) {
       if (!printedGroups.add(group)) continue;
+      if (issues.isNotEmpty) {
+        if (!issues.any(group.contains)) continue;
+      }
       print("## New Group");
       for (final issue in group) {
         print('https://github.com/${repoSlug.fullName}/issues/$issue');
