@@ -23,7 +23,8 @@ void main(List<String> args) async {
   );
   runner
     ..addCommand(CreateEmbeddings(github, model))
-    ..addCommand(QueryEmbeddings(model));
+    ..addCommand(QueryEmbeddings(model))
+    ..addCommand(GroupEmbeddings());
   await runner.run(args);
 }
 
@@ -69,7 +70,7 @@ class CreateEmbeddings extends Command {
     final repoSlug = RepositorySlug.full(argResults.option('repo')!);
     final issues = issuesService.listByRepo(
       repoSlug,
-      since: DateTime(2025, 1, 1),
+      since: DateTime.parse(argResults.option('since')!),
     );
     final taskType = taskTypeFromArg(
       argResults.option('issue-embeddings-task-type')!,
@@ -218,6 +219,90 @@ class QueryEmbeddings extends Command {
       );
     } else {
       print('No issues found');
+    }
+  }
+}
+
+class GroupEmbeddings extends Command {
+  GroupEmbeddings() {
+    argParser
+      ..addOption(
+        'repo',
+        abbr: 'r',
+        help:
+            'The github repo to query or create embeddings for, in org/repo format',
+        mandatory: true,
+      )
+      ..addOption(
+        'issue-embeddings-task-type',
+        help: 'The issue embedding task type to use for grouping',
+        defaultsTo: TaskType.retrievalDocument.name,
+        allowed: TaskType.values.map((e) => e.name).toList(),
+      );
+  }
+
+  @override
+  String get description => 'Runs a query against embeddings for a repo';
+
+  @override
+  String get name => 'group';
+
+  @override
+  Future<void> run() async {
+    var argResults = this.argResults!;
+    final repoSlug = RepositorySlug.full(argResults.option('repo')!);
+    final issueTaskType = taskTypeFromArg(
+      argResults.option('issue-embeddings-task-type')!,
+    );
+
+    // First, read all the embeddings and index by issue number.
+    // Note that for each entry in a set, there is a key in this map pointing
+    // to that set.
+    final groups = <String, Set<String>>{};
+    // All the embeddings we have seen by issue number.
+    final embeddings = <String, Float32List>{};
+    print('reading and comparing embeddings');
+    await for (var dir in Directory(
+      p.join('embeddings', repoSlug.owner, repoSlug.name, 'issues'),
+    ).list()) {
+      if (dir is! Directory) {
+        print(
+          'no embeddings found for ${repoSlug.fullName}, create some with '
+          '`create`',
+        );
+        continue;
+      }
+      final issueNumber = p.basename(dir.path);
+      final embeddingFile = File(
+        p.join(dir.path, '${issueTaskType.name}.embedding'),
+      );
+      final embeddingData = Float32List.view(
+        embeddingFile.readAsBytesSync().buffer,
+      );
+      embeddings[issueNumber] = embeddingData;
+      for (final MapEntry(:key, :value) in embeddings.entries) {
+        if (key == issueNumber) continue;
+
+        final dotProduct = computeDotProduct(value, embeddingData);
+        if (dotProduct > 0.9) {
+          final group = groups.putIfAbsent(key, () => {key});
+          groups[issueNumber] = group;
+          group.add(issueNumber);
+          print(
+            'Added $issueNumber to group for $key (contains ${group.length} items)',
+          );
+        }
+      }
+    }
+
+    print('done grouping issues:');
+    final printedGroups = <Set<String>>{};
+    for (final group in groups.values) {
+      if (!printedGroups.add(group)) continue;
+      print("## New Group");
+      for (final issue in group) {
+        print('https://github.com/${repoSlug.fullName}/issues/$issue');
+      }
     }
   }
 }
