@@ -54,6 +54,10 @@ class CreateEmbeddings extends Command {
         defaultsTo: DateTime.now()
             .subtract(const Duration(days: 365))
             .toIso8601String(),
+      )
+      ..addFlag(
+        'auto-approve',
+        help: 'Skip the confirmation check for creating embeddings',
       );
   }
 
@@ -72,6 +76,7 @@ class CreateEmbeddings extends Command {
     final taskType = taskTypeFromArg(
       argResults.option('issue-embeddings-task-type')!,
     );
+    final autoApprove = argResults.flag('auto-approve');
 
     print('Listing all issues in ${repoSlug.fullName} since $since');
     final issues = issuesService.listByRepo(repoSlug, since: since);
@@ -103,7 +108,7 @@ class CreateEmbeddings extends Command {
     print(
       'Create embeddings for ${issuesToUpdate.length} issues, using approximatly $approxTokens tokens? (y/n)',
     );
-    if (await stdin.readLineSync() == 'y') {
+    if (autoApprove || await stdin.readLineSync() == 'y') {
       print('Creating embeddings');
     } else {
       print('Aborting');

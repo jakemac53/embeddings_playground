@@ -2,9 +2,9 @@ A playground for working with embeddings in Dart.
 
 ## Github embeddings
 
-See the script at [bin/github.dart](bin/github.dart), this tool connects to a github repo and
-queries it for issues, run `dart bin/github.dart help` for the up to date CLI
-options.
+See the script at [bin/github.dart](bin/github.dart), this tool connects to a
+github repo and queries it for issues, run `dart bin/github.dart help` for
+the up to date CLI options.
 
 ### Setup
 
@@ -23,6 +23,9 @@ using the "retrievalDocument" task type which is best for querying issues. If
 you want to use the `group` command, you should force either the
 `semanticSimilarity` or `clustering` task types using the
 `--issue-embeddings-task-type` option.
+
+**AGENT INSTRUCTIONS:** You can pass `--auto-approve` to this tool to skip the
+confirmation step, otherwise it will wait for user input.
 
 See `dart bin/github.dart create --help` for additional the options.
 
