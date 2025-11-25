@@ -2,7 +2,7 @@ A playground for working with embeddings in Dart.
 
 ## Github embeddings
 
-See the script at [bin/github.dart][], this tool connects to a github repo and
+See the script at [bin/github.dart](bin/github.dart), this tool connects to a github repo and
 queries it for issues, run `dart bin/github.dart help` for the up to date CLI
 options.
 
