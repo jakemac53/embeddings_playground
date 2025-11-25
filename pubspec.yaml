@@ -5,6 +5,7 @@ environment:
 dependencies:
   args: ^2.7.0
   crypto: ^3.0.7
+  dart_mcp: ^0.4.0
   github: ^9.25.0
   google_generative_ai: ^0.4.7
   path: ^1.9.1

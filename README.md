@@ -1,6 +1,6 @@
 A playground for working with embeddings in Dart.
 
-## Github embeddings
+## Github embeddings tool
 
 See the script at [bin/github.dart](bin/github.dart), this tool connects to a
 github repo and queries it for issues, run `dart bin/github.dart help` for
@@ -115,4 +115,32 @@ the `--issue` multi-option.
 dart bin/github.dart group \
   --repo <org/repo> \
   --issue <issue-1> --issue <issue-2>
+```
+
+## Github embeddings MCP server
+
+This package also exposes an MCP server at `bin/github_mcp.dart`. This server
+is just a wrapper around the `bin/github.dart` script, but provides an agent
+friendly interface to it.
+
+An example configuration for this server would be something like:
+
+```json
+{
+  "mcpServers": {
+    "githubIssueEmbeddings": {
+      "command": "dart",
+      "args": ["bin/github_mcp.dart"]
+    }
+  }
+}
+```
+
+## Gemini CLI Extension
+
+This package also has an experimental gemini CLI extension, you can install it
+with:
+
+```bash
+gemini extensions install https://github.com/jakemac53/embeddings_playground
 ```

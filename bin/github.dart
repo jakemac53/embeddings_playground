@@ -9,6 +9,10 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:path/path.dart' as p;
 
 void main(List<String> args) async {
+  await createCommandRunner().run(args);
+}
+
+CommandRunner createCommandRunner() {
   final githubToken = Platform.environment['GITHUB_TOKEN'];
   if (githubToken == null) {
     print('Missing GITHUB_TOKEN environment variable.');
@@ -34,7 +38,7 @@ void main(List<String> args) async {
     ..addCommand(CreateEmbeddings(github, model))
     ..addCommand(QueryEmbeddings(model))
     ..addCommand(GroupEmbeddings());
-  await runner.run(args);
+  return runner;
 }
 
 class CreateEmbeddings extends Command {
@@ -66,7 +70,9 @@ class CreateEmbeddings extends Command {
       )
       ..addFlag(
         'auto-approve',
-        help: 'Skip the confirmation check for creating embeddings',
+        help:
+            'Skip the confirmation check for creating embeddings. '
+            'Coding agents should always enable this.',
       );
   }
 

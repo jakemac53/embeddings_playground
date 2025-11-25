@@ -1,0 +1,10 @@
+{
+    "name": "github-issue-embeddings",
+    "version": "0.0.1",
+    "mcpServers": {
+        "githubIssueEmbeddings": {
+            "command": "${extensionPath}${/}build_and_start_server.sh",
+            "cwd": "${extensionPath}"
+        }
+    }
+}
