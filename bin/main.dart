@@ -238,6 +238,13 @@ class GroupEmbeddings extends Command {
         help: 'The issue embedding task type to use for grouping',
         defaultsTo: TaskType.retrievalDocument.name,
         allowed: TaskType.values.map((e) => e.name).toList(),
+      )
+      ..addOption(
+        'group-threshold',
+        help:
+            'A number between -1 and 1, controls whether issues are grouped. '
+            'Numbers closer to 1 will be more closely related.',
+        defaultsTo: '0.9',
       );
   }
 
@@ -254,6 +261,7 @@ class GroupEmbeddings extends Command {
     final issueTaskType = taskTypeFromArg(
       argResults.option('issue-embeddings-task-type')!,
     );
+    final groupThreshold = double.parse(argResults.option('group-threshold')!);
 
     // First, read all the embeddings and index by issue number.
     // Note that for each entry in a set, there is a key in this map pointing
@@ -284,7 +292,7 @@ class GroupEmbeddings extends Command {
         if (key == issueNumber) continue;
 
         final dotProduct = computeDotProduct(value, embeddingData);
-        if (dotProduct > 0.9) {
+        if (dotProduct >= groupThreshold) {
           final group = groups.putIfAbsent(key, () => {key});
           groups[issueNumber] = group;
           group.add(issueNumber);
